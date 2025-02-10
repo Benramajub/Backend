@@ -10,21 +10,147 @@ var jwt = require('jsonwebtoken');
 var token = jwt.sign({ foo: 'bar' }, 'shhhhh');
 const secret = 'Adlog'
 const mysql = require('mysql2')
+const axios = require("axios"); // ใช้ axios เพื่อส่ง HTTPS
+
 const connection = mysql.createConnection({
     host: 'localhost',
     user: 'root',
     database: 'gym_management',
+    port: 3306,
+    waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
   });
+
 
 app.use(cors());
 app.use(bodyParser.json());
 
+// ตั้งค่า Serial Port
+
+const WebSocket = require("ws");
+
+// 🔥 สร้าง WebSocket Server ที่พอร์ต 8080
+const wss = new WebSocket.Server({ port: 8080 });
+
+// ✅ เก็บค่าการร้องขอลงทะเบียนลายนิ้วมือ (เปลี่ยนตามการร้องขอจาก Frontend)
+let pendingEnrollRequest = null;
+
+
+const ESP32_URL = "https://192.168.1.50/enroll"; // 🔥 แก้เป็น IP ของ ESP32
+
+app.post("/api/fingerprint/enroll", async (req, res) => {
+  const { memberId } = req.body;
+
+  if (!memberId) {
+    return res.status(400).json({ message: "❌ Missing memberId" });
+  }
+
+  try {
+    console.log(`📡 ส่งข้อมูลไปยัง ESP32: Member ID ${memberId}`);
+    
+    // ✅ ส่งข้อมูลไปยัง ESP32 ผ่าน HTTPS
+    const response = await axios.post(ESP32_URL, { memberId });
+
+    console.log("✅ ESP32 ตอบกลับ:", response.data);
+
+    res.status(200).json({ message: "📨 ส่งข้อมูลไปยัง ESP32 สำเร็จ!", espResponse: response.data });
+  } catch (error) {
+    console.error("❌ Error sending data to ESP32:", error.message);
+    res.status(500).json({ message: "❌ ไม่สามารถส่งข้อมูลไปที่ ESP32 ได้", error: error.message });
+  }
+});
+
+app.get("/api/fingerprint/request_enroll", (req, res) => {
+  try {
+    res.setHeader("Content-Type", "application/json");
+    res.status(200).json({ message: "API is working!", memberId: 1 });
+  } catch (error) {
+    console.error("❌ Server error:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
+});
+
+
+// ✅ API ให้ Frontend หรือ Admin ส่ง `memberId` มาให้ ESP32 ลงทะเบียน
+app.post("/api/fingerprint/request_enroll", (req, res) => {
+  const { memberId } = req.body;
+  
+  if (!memberId) {
+    return res.status(400).json({ message: "Missing memberId" });
+  }
+
+  pendingEnrollRequest = memberId; // เก็บค่ารอ ESP32 ดึงไปใช้
+  res.status(200).json({ message: `Enrollment request for Member ID: ${memberId} received` });
+});
+
+// ✅ API สำหรับรับข้อมูลการสแกนลายนิ้วมือ
+app.post("/api/fingerprint/scan", (req, res) => {
+  const { fingerprintID } = req.body;
+  if (!fingerprintID) {
+    return res.status(400).json({ message: "Missing fingerprint ID" });
+  }
+
+  const findMemberSql = "SELECT member_id FROM fingerprints WHERE fingerprint_id = ?";
+  db.query(findMemberSql, [fingerprintID], (err, result) => {
+    if (err) {
+      console.error("❌ Database error:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "Fingerprint not found" });
+    }
+
+    const memberId = result[0].member_id;
+    const scanTime = new Date();
+
+    const insertScanSql = "INSERT INTO scan_logs (member_id, scan_time) VALUES (?, ?)";
+    db.query(insertScanSql, [memberId, scanTime], (err) => {
+      if (err) {
+        console.error("❌ Database insert error:", err);
+        return res.status(500).json({ message: "Database insert error" });
+      }
+
+      console.log(`✅ Logged scan for Member ID: ${memberId} at ${scanTime}`);
+      return res.status(200).json({ message: "Scan logged successfully", memberId, scanTime });
+    });
+  });
+});
+
+const fingerRoutes = require("./routes/fingerRoutes");
+app.use("/api/fingerprint", fingerRoutes);
+
+const dailyMembersRoutes = require('./routes/dailyMembers'); // Import API ใหม่
+// ใช้ API ของ Payment2 (Dailymembers)
+app.use('/api', dailyMembersRoutes);
+
+
+// Route สำหรับดึงข้อมูลสมาชิก
+app.get("/api/fingrtprints/members", (req, res) => {
+  db.query("SELECT * FROM members WHERE hasFingerprint = 0", (error, results) => {
+    if (error) {
+      console.error("Database error:", error);
+      return res.status(500).json({ message: "Database error." });
+    }
+    res.json(results);
+  });
+});
+
+
+
+
+const reportsRoutes = require("./routes/reports");
+app.use("/api", reportsRoutes); // ใช้ API reports
 // Routes
 const memberRoutes = require('./routes/memberRoutes');
 app.use('/api/members', memberRoutes);
 
 const paymentRoutes = require('./routes/paymentRoutes');
 app.use('/api/payments', paymentRoutes);
+
+
+
 
 // API สำหรับดึงข้อมูลสมาชิกทั้งหมด
 app.get('/api/members', (req, res) => {
@@ -158,7 +284,12 @@ app.get('/api/members/:id', (req, res) => {
       res.status(200).json(results[0]); // ส่งข้อมูลสมาชิกกลับไปที่ฟรอนต์เอนด์
     });
   });
+
   
+  app.post("/fingerprints", (req, res) => {
+    console.log(req.body);
+    res.json({ message: "Fingerprint data received successfully" });
+  });
   
   app.delete('/api/members/:id', (req, res) => {
     const { id } = req.params;
