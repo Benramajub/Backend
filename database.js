@@ -1,15 +1,8 @@
-const mysql = require('mysql');
+require('dotenv').config();
+const mysql = require('mysql2');
 
-const connection = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  
-  database: 'gym_management',
+const db = mysql.createConnection({
+    uri: process.env.MYSQL_URI, // ใช้ค่า URI จาก .env
 });
 
-connection.connect((err) => {
-  if (err) throw err;
-  console.log('Database connected!');
-});
-
-module.exports = connection;
+module.exports = db;

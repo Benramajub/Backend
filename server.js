@@ -2,42 +2,31 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 var jsonParser = bodyParser.json()
-const db = require('./database');
+
 const app = express();
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 var jwt = require('jsonwebtoken');
 var token = jwt.sign({ foo: 'bar' }, 'shhhhh');
 const secret = 'Adlog'
-const mysql = require('mysql2')
-const axios = require("axios"); // ใช้ axios เพื่อส่ง HTTPS
-
-const connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    database: 'gym_management',
-    port: 3306,
-    waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  });
-
 
 app.use(cors());
 app.use(bodyParser.json());
+app.use(express.json());
 
-// ตั้งค่า Serial Port
+require('dotenv').config();
+const mysql = require('mysql2');
 
-const WebSocket = require("ws");
-
-// 🔥 สร้าง WebSocket Server ที่พอร์ต 8080
-const wss = new WebSocket.Server({ port: 8080 });
-
-// ✅ เก็บค่าการร้องขอลงทะเบียนลายนิ้วมือ (เปลี่ยนตามการร้องขอจาก Frontend)
-let pendingEnrollRequest = null;
+const db = mysql.createConnection({
+    uri: process.env.MYSQL_URI, // ใช้ค่า URI จาก .env
+});
 
 
-const ESP32_URL = "https://192.168.1.50/enroll"; // 🔥 แก้เป็น IP ของ ESP32
+db.connect((err) => {
+  if (err) throw err;
+  console.log('Connect to Mysql');
+});
+
 
 app.post("/api/fingerprint/enroll", async (req, res) => {
   const { memberId } = req.body;
@@ -138,16 +127,6 @@ app.get("/api/fingrtprints/members", (req, res) => {
 });
 
 
-
-
-const reportsRoutes = require("./routes/reports");
-app.use("/api", reportsRoutes); // ใช้ API reports
-// Routes
-const memberRoutes = require('./routes/memberRoutes');
-app.use('/api/members', memberRoutes);
-
-const paymentRoutes = require('./routes/paymentRoutes');
-app.use('/api/payments', paymentRoutes);
 
 
 
