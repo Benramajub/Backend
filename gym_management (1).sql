@@ -72,10 +72,10 @@ INSERT INTO `fingerprints` (`id`, `fingerprint_id`, `member_id`, `created_at`) V
 --
 
 CREATE TABLE `members` (
-  `id` int(11) NOT NULL,
-  `firstName` varchar(50) NOT NULL,
-  `lastName` varchar(50) NOT NULL,
-  `age` int(11) NOT NULL,
+  `id` int(11) NOT NULL PRIMARY KEY,
+  `firstName` varchar(50) DEFAULT NULL,
+  `lastName` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
   `phone` varchar(15) DEFAULT NULL,
   `email` varchar(100) DEFAULT NULL,
   `duration` int(11) DEFAULT NULL,
@@ -86,7 +86,7 @@ CREATE TABLE `members` (
   `endDate` date DEFAULT NULL,
   `status` varchar(20) DEFAULT NULL,
   `hasFingerprint` tinyint(1) DEFAULT 0,
-  `fingerprint_id` int(11) NOT NULL
+  `fingerprint_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -105,7 +105,7 @@ INSERT INTO `members` (`id`, `firstName`, `lastName`, `age`, `phone`, `email`, `
 --
 
 CREATE TABLE `payments` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL PRIMARY KEY AUTO_INCREMENT,
   `memberId` int(11) NOT NULL,
   `amount` decimal(10,2) NOT NULL,
   `date` date NOT NULL
