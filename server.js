@@ -440,6 +440,7 @@ app.get("/api/finger/:memberId/getfingerprint", (req, res) => {
   });
 });
 
+
 // ✅ ลบ fingerprint ตาม memberId
 app.delete("/api/finger/:memberId/delfingerprint", (req, res) => {
   const { memberId } = req.params;
@@ -580,40 +581,42 @@ app.post("/api/dailymembers/use-code", async (req, res) => {
 });
 
 
-// 📌 **API ลบรหัสที่ใช้หมดแล้ว**
-app.delete("/api/dailymembers/cleanup", async (req, res) => {
-  try {
-      await db.query(`DELETE FROM Dailymembers WHERE uses_remaining = 0`);
-      res.json({ message: "✅ ลบรหัสที่หมดอายุสำเร็จ!" });
-  } catch (error) {
-      console.error("❌ Error deleting expired codes:", error);
-      res.status(500).json({ error: "เกิดข้อผิดพลาดในการลบข้อมูล" });
-  }
-});
 
 
-// 📌 ฟังก์ชันสำหรับลงทะเบียนลายนิ้วมือ
-function enrollFingerprint(serialPort, memberId, callback) {
-  console.log(`📌 Enrolling fingerprint for Member ID: ${memberId}`);
 
-  // **ตัวอย่างการส่งคำสั่งไปยังเครื่องสแกน (ขึ้นกับอุปกรณ์ที่ใช้)**
-  serialPort.write(`ENROLL ${memberId}\n`, (err) => {
-      if (err) {
-          return callback(err, { success: false });
+app.post("/api/addmembers", (req, res) => {
+  const { id, firstName, lastName, age, phone, email, duration, originalPrice, points, discount, startDate, endDate } = req.body;
+
+  // ตรวจสอบว่ามี ID นี้อยู่ในระบบแล้วหรือไม่
+  db.query("SELECT id FROM members WHERE id = ?", [id], (err, results) => {
+    if (err) {
+      console.error("❌ Error checking existing ID:", err);
+      res.status(500).json({ error: "Database error" });
+      return;
+    }
+
+    if (results.length > 0) {
+      return res.status(400).json({ error: "❌ ID already exists. Please use another ID." });
+    }
+
+    // เพิ่มข้อมูลสมาชิก
+    const insertQuery =
+      "INSERT INTO members (id, firstName, lastName, age, phone, email, duration, originalPrice, points, discount, startDate, endDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    db.query(
+      insertQuery,
+      [id, firstName, lastName, age, phone, email, duration, originalPrice, points, discount, startDate, endDate],
+      (err, results) => {
+        if (err) {
+          console.error("❌ Error adding member:", err);
+          res.status(500).json({ error: "Failed to add member" });
+          return;
+        }
+        res.status(201).json({ message: "✅ Member added successfully!", id });
       }
-
-      serialPort.once("data", (data) => {
-          const response = data.toString().trim();
-          console.log("🔍 Fingerprint Scanner Response:", response);
-
-          if (response === "SUCCESS") {
-              callback(null, { success: true });
-          } else {
-              callback(null, { success: false });
-          }
-      });
+    );
   });
-}
+});
 
 app.post("/api/fingerprint/enroll", (req, res) => {
   const { memberId } = req.body;
@@ -705,58 +708,6 @@ app.post("/api/fingerprint/delete", (req, res) => {
 
 
 
-
-// 📌 API: ลงทะเบียนลายนิ้วมือ
-app.post("/api/enroll-fingerprint", (req, res) => {
-  const { memberId } = req.body;
-
-  if (!memberId) {
-      return res.status(400).json({ message: "Member ID is required." });
-  }
-
-  // ✅ ตรวจสอบว่า Member ID มีอยู่หรือไม่
-  db.query("SELECT * FROM members WHERE id = ?", [memberId], (err, results) => {
-      if (err) {
-          console.error("❌ Database error:", err);
-          return res.status(500).json({ message: "Database error." });
-      }
-
-      if (results.length === 0) {
-          return res.status(404).json({ message: "Member not found." });
-      }
-
-      const member = results[0];
-      if (member.hasFingerprint) {
-          return res.status(400).json({ message: "Fingerprint already registered for this member." });
-      }
-
-      // ✅ เรียกใช้ฟังก์ชัน enrollFingerprint
-      enrollFingerprint(serialPort, memberId, (err, result) => {
-          if (err) {
-              console.error("❌ Error enrolling fingerprint:", err);
-              return res.status(500).json({ message: "Error enrolling fingerprint." });
-          }
-
-          if (result.success) {
-              // ✅ อัปเดตสถานะในฐานข้อมูล
-              db.query(
-                  "UPDATE members SET hasFingerprint = 1 WHERE id = ?",
-                  [memberId],
-                  (updateErr) => {
-                      if (updateErr) {
-                          console.error("❌ Database update error:", updateErr);
-                          return res.status(500).json({ message: "Failed to update database." });
-                      }
-
-                      res.status(200).json({ message: "✅ Fingerprint enrolled successfully." });
-                  }
-              );
-          } else {
-              res.status(400).json({ message: "Failed to enroll fingerprint." });
-          }
-      });
-  });
-});
 
 
 // 📌 API: ดำเนินการชำระเงิน

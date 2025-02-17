@@ -11,6 +11,8 @@ const db = mysql.createConnection({
   ssl: { rejectUnauthorized: true } // 🔥 เปิด SSL
 });
 
+
+
 db.connect((err) => {
     if (err) {
       console.error("Database connection failed:", err);
